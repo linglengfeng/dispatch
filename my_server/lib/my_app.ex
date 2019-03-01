@@ -4,9 +4,8 @@ defmodule MyApp do
 
   def start(_Type, _Args) do
     Logger.debug(fn -> "Application start\n" end)
-    {:ok, _} = :ranch.start_listener(:server, :ranch_tcp, [{:port, 1111}], MyProtocol, [])
-    # [strategy: :one_for_one, name: name]
-    # MyServerSup.start_link()
+    port = Application.get_env(:my_server, :port, 1111)
+    {:ok, _} = :ranch.start_listener(:server, :ranch_tcp, [{:port, port}], MyProtocol, [])
     children = []
     Supervisor.start_link(children, [strategy: :one_for_one, name: __MODULE__])
   end
