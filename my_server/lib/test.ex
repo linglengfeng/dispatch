@@ -11,4 +11,8 @@ defmodule Test do
   def add(a, b, c) do
     "here is add/3, #{a} + #{b} + #{c} = #{a + b + c}"
   end
+
+  def map(%{a: a, b: b}) do
+    "map_sum:#{a + b}"
+  end
 end

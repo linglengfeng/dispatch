@@ -1,8 +1,7 @@
 "# dispatch" 
 
-不用my_client也可以用:
-  telnet localhost port
+my_client可以用:
+  MyClient.send(Test, :test0, [1,2,3]) 进行尝试
+  MyClient.tcp_connect/0, tcp_connect/2,连接
+  MyClient.close(delay) 断开
 
-iex -S mix 启动后可输入： Test test0 [1,2,3]
-进行第一次尝试
-改天找个解析的依赖替换下

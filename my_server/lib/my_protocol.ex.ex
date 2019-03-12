@@ -15,14 +15,23 @@ defmodule MyProtocol do
   end
 
   def handle_info({:tcp, socket, packet}, state = %{socket: socket, transport: transport}) do
-    packet = decode(packet)
+    case decode(packet) do
+      :ok ->
+        :ok
 
-    transport.setopts(socket, [{:active, :once}])
-    transport.send(socket, encode(packet))
+      :err ->
+        :err
+      
+      msg ->
+        transport.setopts(socket, [{:active, :once}])
+        transport.send(socket, encode(msg))
+    end
     {:noreply, state, @timeout}
   end
 
-  def handle_info({:tcp_closed, _Socket}, state) do
+  def handle_info({:tcp_closed, _socket}, %{socket: socket, transport: transport} = state) do
+    Logger.debug(fn -> "tcp_closed, socket:#{inspect socket}" end)
+    transport.close(socket)
     {:stop, :normal , state}
   end
 
@@ -32,12 +41,14 @@ defmodule MyProtocol do
     {:stop, reason, state}
   end
 
-  def handle_info(:timeout, state) do
+  def handle_info(:timeout, %{socket: socket, transport: transport} = state) do
+    transport.close(socket)
     {:stop, :normal , state}
   end
 
-  def handle_info(info, state) do
+  def handle_info(info, %{socket: socket, transport: transport} = state) do
     Logger.debug(fn -> "handle_info:#{inspect info}" end)
+    transport.close(socket)
     {:stop, :normal, state}
   end
 
@@ -55,60 +66,36 @@ defmodule MyProtocol do
     :ok
   end
 
-  def reverse_encode(packet) do
-    if is_binary(packet) do
-      [
-        packet
-        |> :binary.part({0, byte_size(packet)}) 
-        |> :binary.bin_to_list() 
-        |> :lists.reverse()
-        |> :erlang.list_to_binary()
-      ]
+  def decode(packet) do
+    with true <- is_binary(packet),
+      [mod, func, args] <- :erlang.binary_to_term(packet),
+      true <- is_list(args) && is_atom(func)
+    do
+      apply_func(mod, func, args)
     else
-      [packet]
+      err ->
+        Logger.debug(fn -> "decode err, err:#{inspect err}, packet:#{inspect packet}\n" end)
+        :err
     end
   end
 
-  def decode(packet) do
-    if is_bitstring(packet) do
-      case String.split(packet) do
-        [mod, func, args] ->
-          mod = String.capitalize(mod)
-          mod = Module.concat(Elixir, mod)
-          func = func |> String.downcase() |> String.to_atom()
-          args = (args <> ".") |> String.to_charlist()
-          with {:ok, list, _} <- :erl_scan.string(args),
-            {:ok, l2} <- :erl_parse.parse_exprs(list),
-            {:value, args, _} <- :erl_eval.exprs(l2, [])
-          do
-            if function_exported?(mod, func, length(args)) do
-              try do
-                apply(mod, func, args)
-              rescue
-                err ->
-                  Logger.debug(fn -> "#{mod}.#{func} error: #{inspect(err, pretty: true)}\n}" end)
-              end
-            else
-              Logger.debug(fn -> "func non-existent, #{mod}.#{func}/#{length(args)}\n" end)
-              packet
-            end
-          else
-            _ ->
-              Logger.debug(fn -> "analysis failed, packet:#{inspect packet}\n" end)
-              packet
-          end
-
-        _ ->
-          Logger.debug(fn -> "format err, packet:#{inspect packet}\n" end)
-          packet
-      end
-    else
-      packet
-    end  
+  def encode(msg) do
+    msg |> :erlang.term_to_binary()
   end
 
-  def encode(packet) do
-    [packet]
+  def apply_func(mod, func, args) do
+    if function_exported?(mod, func, length(args)) do
+      try do
+        apply(mod, func, args)
+      rescue
+        err ->
+          Logger.debug(fn -> "#{mod}.#{func} error: #{inspect(err, pretty: true)}\n}" end)
+          :err
+      end
+    else
+      Logger.debug(fn -> "func non-existent, #{mod}.#{func}/#{length(args)}\n" end)
+      :err
+    end
   end
 
 end
