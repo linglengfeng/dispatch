@@ -5,3 +5,6 @@ my_client可以用:
   MyClient.tcp_connect/0, tcp_connect/2,连接
   MyClient.close(delay) 断开
 
+  Msg.send(:login, :player, [123]) 
+  Msg.send(Chat, :join, [1]) 
+  Msg.send(Chat, :send, [{:hello, :world}])

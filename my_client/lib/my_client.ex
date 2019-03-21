@@ -2,8 +2,8 @@ defmodule MyClient do
   use GenServer
   require Logger
 
-  def start_link(name) do
-    GenServer.start_link(__MODULE__, [], name: name)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, :ok, opts)
   end
 
   def init(_) do
@@ -24,8 +24,16 @@ defmodule MyClient do
   end
 
   def handle_cast({:send, msg}, %{connect_socket: connect_socket} = state) do
-    :gen_tcp.send(connect_socket, msg)
-    {:noreply, state}
+    case :gen_tcp.send(connect_socket, msg) do
+      :ok ->
+        {:noreply, state}
+
+      err ->
+        Logger.debug(fn -> "gen_tcp send err:#{inspect err}\n, 
+          tcp_connect, try again" end)
+        tcp_connect()
+        {:noreply, state |> Map.delete(:connect_socket)}
+    end
   end
 
   def handle_cast(msg, state) do
@@ -77,20 +85,6 @@ defmodule MyClient do
       state
   end
 
-  def connect() do
-    ip = Application.get_env(:my_client, :ip, {0, 0, 0, 0})
-    port = Application.get_env(:my_client, :port, 1111)
-    {:ok, connect_socket} = :gen_tcp.connect(ip, port, [:binary, {:packet, 0}])
-    Logger.debug(fn -> "connect_socket:#{inspect connect_socket}" end)
-    connect_socket
-  end
-
-  def connect(ip, port) do
-    {:ok, connect_socket} = :gen_tcp.connect(ip, port, [:binary, {:packet, 0}])
-    Logger.debug(fn -> "connect_socket:#{inspect connect_socket}" end)
-    connect_socket
-  end
-
   # MyClient.send(Test, :test0, [1,2,3])
   def send(mod, func, args \\ []) do
     msg = encode(mod, func, args)
@@ -98,10 +92,12 @@ defmodule MyClient do
   end
 
   def tcp_connect() do
+    close()
     req_info({:tcp_connect}, 0)
   end
 
   def tcp_connect(ip, port) do
+    close()
     req_info({:tcp_connect, ip, port}, 0)
   end
 
@@ -109,12 +105,26 @@ defmodule MyClient do
     req_info({:closed}, delay)
   end
 
-  def encode(mod, func, args) do
+  defp encode(mod, func, args) do
     [mod, func, args] |> :erlang.term_to_binary()
   end
 
-  def decode(msg) do
+  defp decode(msg) do
     :erlang.binary_to_term(msg)
+  end
+
+  defp connect() do
+    ip = Application.get_env(:my_client, :ip, {0, 0, 0, 0})
+    port = Application.get_env(:my_client, :port, 1111)
+    {:ok, connect_socket} = :gen_tcp.connect(ip, port, [:binary, {:packet, 0}])
+    Logger.debug(fn -> "connect_socket:#{inspect connect_socket}" end)
+    connect_socket
+  end
+
+  defp connect(ip, port) do
+    {:ok, connect_socket} = :gen_tcp.connect(ip, port, [:binary, {:packet, 0}])
+    Logger.debug(fn -> "connect_socket:#{inspect connect_socket}" end)
+    connect_socket
   end
 
 end
