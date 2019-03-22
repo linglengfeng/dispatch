@@ -30,3 +30,5 @@ use Mix.Config
 #     import_config "#{Mix.env()}.exs"
 config :my_client, port: 1111
 config :my_client, ip: {192, 168, 1, 229}
+
+import_config "#{Mix.env}.exs"

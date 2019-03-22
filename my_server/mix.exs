@@ -6,6 +6,7 @@ defmodule Server.MixProject do
       app: :my_server,
       version: "0.1.0",
       elixir: "~> 1.7",
+      build_embedded: Mix.env == :prod,
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -14,9 +15,22 @@ defmodule Server.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      applications: applications(Mix.env()),
       extra_applications: [:logger],
       mod: {MyApp, []}
     ]
+  end
+
+  def applications(:prod) do
+    [:ranch, :timex]
+  end
+
+  def applications(:dev) do
+    applications(:prod) ++ [:changed_reloader]
+  end
+
+  def applications(_) do
+    applications(:prod) ++ [:changed_reloader]
   end
 
   # Run "mix help deps" to learn about dependencies.
