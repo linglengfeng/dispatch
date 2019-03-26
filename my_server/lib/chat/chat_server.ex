@@ -47,7 +47,7 @@ defmodule Chat.Server do
   def handle_cast({:join_send, channel, id, msg}, state) do
     ids = General.list_put(Map.get(state, channel, []), id)
     ids |> Enum.each(fn id ->
-      Progression.cast_role(id, {:notify, msg, %{}})
+      Progression.cast(id, {:notify, msg, %{}})
     end)
     {:noreply, state |> Map.merge(%{channel => ids})}
   end
@@ -55,7 +55,7 @@ defmodule Chat.Server do
   def handle_cast({:send, channel, _id, msg}, state) do
     Map.get(state, channel, [])
     |> Enum.each(fn id ->
-      Progression.cast_role(id, {:notify, msg, %{}})
+      Progression.cast(id, {:notify, msg, %{}})
     end)
     {:noreply, state}
   end
