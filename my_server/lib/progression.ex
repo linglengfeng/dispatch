@@ -54,6 +54,13 @@ defmodule Progression do
     end
   end
 
+  def online?(id) do
+    case whereis(id) do
+      pid when is_pid(pid) -> true
+      _ -> false
+    end
+  end
+
   # Roles.Supervisor
   def onlines(module \\ Roles.Supervisor) do
     Supervisor.which_children(module)

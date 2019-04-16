@@ -1,5 +1,6 @@
 defmodule Chat.Server do
   use GenServer
+  require Logger
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, :ok, opts)
@@ -30,36 +31,6 @@ defmodule Chat.Server do
     {:reply, :invalid, state}
   end
 
-  def handle_cast({:join, channel, id, prev_channel}, state) do
-    changed = 
-      if prev_channel == channel do
-        ids = General.list_put(Map.get(state, channel, []), id)
-        %{channel => ids}
-      else
-        prec_c_ids = General.list_del(Map.get(state, prev_channel, []), id)
-        ids = General.list_put(Map.get(state, channel, []), id)
-        %{channel => ids, prev_channel => prec_c_ids}
-      end
-
-    {:noreply, state |> Map.merge(changed)}
-  end
-
-  def handle_cast({:join_send, channel, id, msg}, state) do
-    ids = General.list_put(Map.get(state, channel, []), id)
-    ids |> Enum.each(fn id ->
-      Progression.cast(id, {:notify, msg, %{}})
-    end)
-    {:noreply, state |> Map.merge(%{channel => ids})}
-  end
-
-  def handle_cast({:send, channel, _id, msg}, state) do
-    Map.get(state, channel, [])
-    |> Enum.each(fn id ->
-      Progression.cast(id, {:notify, msg, %{}})
-    end)
-    {:noreply, state}
-  end
-
   def handle_cast(_msg, state) do
     {:noreply, state}
   end
@@ -69,6 +40,44 @@ defmodule Chat.Server do
   end
 
   def terminate(_reason, _stage) do
+    :ok
+  end
+
+  def dispatch({:channel, channel, atom}, %{msg: msg} = info) when is_atom(atom) do
+    Registry.dispatch(Chat.chat_name(), Chat.chat_key(), fn x ->
+      for {session_pid, id} <- x do
+        try do
+          case atom do
+            :all -> 
+              Progression.online?(id) && Progression.cast(session_pid, {:notify, %{msg: msg, channel: channel}})
+            :some -> 
+              kick_ids = Map.get(info, :ids, [])
+              Progression.online?(id) && (!(id in kick_ids)) && 
+                Progression.cast(session_pid, {:notify, %{msg: msg, channel: channel}})
+            _ -> :ok
+          end
+
+        rescue
+          err -> Logger.debug(fn -> "chat server dispatch err:#{inspect err}" end)
+        end
+      end
+    end)
+  end
+
+  def dispatch({:people, other_id, self_id}, %{msg: msg}) when is_integer(self_id) do
+    case Registry.match(Chat.chat_name(), Chat.chat_key(), other_id) do
+      [{session_pid, _} | _] ->
+        try do
+          Progression.online?(other_id) && Progression.cast(session_pid, {:notify, %{msg: msg, channel: other_id}})
+        rescue
+          err -> Logger.debug(fn -> "chat server dispatch err:#{inspect err}" end)
+        end
+
+      _ -> :ok
+    end
+  end
+
+  def dispatch(_, _) do
     :ok
   end
 

@@ -15,6 +15,7 @@ defmodule Session do
     :gen_server.enter_loop(__MODULE__, [], %{socket: socket, transport: transport}, @timeout)
   end
 
+  # GenServer.call(id, {:get_info})
   def handle_call({:get_info}, _from, state) do
     {:reply, state, state}
   end
@@ -22,6 +23,12 @@ defmodule Session do
   def handle_call(request, from, state) do
     Logger.debug(fn -> "handle_call:#{inspect request}, from:#{inspect from}" end)
     {:reply, :ok , state}
+  end
+
+  def handle_cast({:reply, {:data, %{id: id} = data}}, %{socket: socket, transport: transport} = state) do
+    transport.send(socket, encode(data))
+    state = state |> Map.put(:data, data) |> Map.merge(Chat.init(id))
+    {:noreply, state}
   end
 
   def handle_cast({:notify, msg}, %{socket: socket, transport: transport} = state) do
@@ -46,7 +53,8 @@ defmodule Session do
         {:noreply, new_state}
 
       {:reply, sign, new_state} ->
-        {:reply, sign, new_state}
+        transport.send(socket, encode(sign))
+        {:noreply, new_state}
 
       {:notify, client_msg} ->
         transport.send(socket, encode(client_msg))
@@ -108,8 +116,8 @@ defmodule Session do
         {:noreply, new_state} ->
           {:noreply, new_state}
   
-        {:reply, sign , new_state} ->
-          {:reply, sign , new_state}
+        {:reply, sign, new_state} ->
+          {:reply, sign, new_state}
 
         _ ->
           case Map.get(state, :id) do
@@ -149,8 +157,16 @@ defmodule Session do
     end
   end
 
-  defp handle_request(_, _, _, _) do
-    :ok
+  defp handle_request(:chat, :channel, [channel, msg], state) do
+    Chat.handle_request({:channel, channel, msg}, state)
+  end
+
+  defp handle_request(:chat, :people, [other_id, msg], state) do
+    Chat.handle_request({:people, other_id, msg}, state)
+  end
+
+  defp handle_request(_, _, _, state) do
+    {:noreply, state}
   end
 
   defp role_opts(role_id) do

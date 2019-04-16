@@ -1,12 +1,6 @@
 defmodule Roles.Supervisor do
   use Supervisor
 
-  # def start_avatar(avatar_id, session) do
-  #   Avatar.Supervisor.start_child {avatar_id, session},
-  #     [name: {:global, {:name, Guid.name(avatar_id)}},
-  #      spawn_opt: [min_heap_size: 32 * 1024]]
-  # end
-
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, :ok, opts)
   end
@@ -34,11 +28,10 @@ defmodule Role do
   end
 
   def init({id, session}) do
-    data = %{} # todo: load data from db
+    data = load_data({id, session})
     Process.flag(:trap_exit, true)
     # 已经在start_child role_opts中选了,不必再注册
     # Progression.register(id, self())
-    data = Map.put(data, :id, id)
     {:ok, {id, session, data}}
   end
 
@@ -129,6 +122,19 @@ defmodule Role do
       Logger.debug(fn -> "func non-existent, #{mod}.#{func}/#{length(args)}\n" end)
       :err
     end
+  end
+
+  # todo: load data from db
+  defp load_data({id, session}) do
+    data = %{}
+      |> Map.merge(%{id: id})
+
+    Progression.cast(session, {:reply, {:data, add_drop_data(data)}})
+    data
+  end
+
+  defp add_drop_data(data) do
+    data
   end
 
 end

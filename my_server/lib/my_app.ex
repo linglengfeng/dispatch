@@ -7,9 +7,10 @@ defmodule MyApp do
     port = Application.get_env(:my_server, :port, 1111)
     {:ok, _} = :ranch.start_listener(:server, :ranch_tcp,
       [{:port, port}, {:max_connections, 4000}], Session, [])
+      
     children = [
       {Roles.Supervisor, [name: Roles.Supervisor]},
-      {Chat.Server, [name: Chat.Server]}
+      {Chat.Supervisor, [name: Chat.Supervisor]}
     ]
     Supervisor.start_link(children, [strategy: :one_for_one, name: __MODULE__])
   end
