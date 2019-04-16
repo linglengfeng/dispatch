@@ -38,4 +38,8 @@ defmodule Chat do
     {:reply, {:ok, id, other_ids}, state}
   end
 
+  def handle_request(_, state) do
+    {:noreply, state}
+  end
+
 end

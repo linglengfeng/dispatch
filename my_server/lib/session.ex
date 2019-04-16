@@ -25,9 +25,15 @@ defmodule Session do
     {:reply, :ok , state}
   end
 
-  def handle_cast({:reply, {:data, %{id: id} = data}}, %{socket: socket, transport: transport} = state) do
+  def handle_cast({:login_duplicate, role_id}, %{socket: socket, transport: transport} = state) do
+    Logger.debug(fn -> "handle_cast login_duplicate role_id:#{inspect role_id}, inspect:#{inspect state}" end)
+    transport.close(socket)
+    {:stop, :normal , state}
+  end
+
+  def handle_cast({:reply, {:data, data}}, %{socket: socket, transport: transport} = state) do
     transport.send(socket, encode(data))
-    state = state |> Map.put(:data, data) |> Map.merge(Chat.init(id))
+    state = state |> Map.put(:data, data)
     {:noreply, state}
   end
 
@@ -143,17 +149,32 @@ defmodule Session do
   end
 
   defp handle_request(:login, :player, [role_id], state) do
-    # todo: Reconnect
+    # todo: reconnect, login_duplicate
     case Roles.Supervisor.start_child({role_id, self()}, role_opts(role_id)) do
       {:ok, role_pid} ->
         Process.flag(:trap_exit, true)
         Process.link(role_pid)
         Progression.cast(role_pid, {:login, role_id})
-        {:noreply, state |> Map.merge(%{id: role_id})}
-
-      err ->
-        Logger.debug(fn -> "login player err:#{inspect err}" end)
+        state = state |> Map.merge(%{id: role_id}) |> Map.merge(Chat.init(role_id))
         {:noreply, state}
+
+      _ ->
+        with true <- Progression.online?(role_id),
+          [{old_session_pid, ^role_id} | _] <- Registry.match(Chat.chat_name(), Chat.chat_key(), role_id)
+        do
+          if old_session_pid == self() do
+            {:noreply, state}
+          else
+            Progression.cast(old_session_pid, {:login_duplicate, role_id})
+            Registry.unregister_match(Chat.chat_name(), Chat.chat_key(), role_id)
+            state = state |> Map.merge(%{id: role_id}) |> Map.merge(Chat.init(role_id))
+            {:noreply, state}
+          end
+        else
+          err -> 
+            Logger.debug(fn -> "login player err:#{inspect err}, self:#{inspect self()}" end)
+            {:stop, :normal, state}
+        end
     end
   end
 
